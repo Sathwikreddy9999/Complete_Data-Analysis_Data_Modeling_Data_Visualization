@@ -1,0 +1,6 @@
+customer_id,name,email,region
+1,Alice Smith,alice@example.com,North
+2,Bob Jones,bob@example.com,South
+3,Charlie Brown,charlie@example.com,North
+4,Diana Prince,diana@example.com,East
+5,Evan Wright,evan@example.com,West

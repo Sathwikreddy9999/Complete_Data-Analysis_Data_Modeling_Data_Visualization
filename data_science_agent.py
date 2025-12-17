@@ -11,6 +11,13 @@ from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, r2_score, confusion_matrix
 from tabulate import tabulate
+import xgboost as xgb
+import lightgbm as lgb
+from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import RandomizedSearchCV
 from langchain_core.tools import tool
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -150,6 +157,117 @@ def generate_plot(plot_type: str, x_col: str = None, y_col: str = None, hue: str
     except Exception as e:
         return f"Plotting failed: {e}"
 
+@tool
+def run_automl(target_col: str, task_type: str = 'classification', ignore: str = None) -> str:
+    """
+    Runs AutoML to find the best model for a given target column.
+    Args:
+        target_col (str): The name of the target column.
+        task_type (str): 'classification' or 'regression'.
+    Returns:
+        str: A table summarizing the performance of different models and the best model's parameters.
+    """
+    if "df" not in st.session_state or st.session_state.df is None: return "No data."
+    df = st.session_state.df.copy() # Work on a copy
+    
+    if target_col not in df.columns:
+        return f"Error: Target column '{target_col}' not found."
+    
+    try:
+        # 1. Preprocessing
+        # Drop rows with missing target
+        df = df.dropna(subset=[target_col])
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
+        
+        # Identify columns
+        numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+        categorical_features = X.select_dtypes(include=['object', 'category']).columns
+        
+        # Transformers
+        numeric_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='median')),
+            ('scaler', StandardScaler())
+        ])
+        
+        categorical_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='most_frequent')),
+            ('encoder', OneHotEncoder(handle_unknown='ignore'))
+        ])
+        
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', numeric_transformer, numeric_features),
+                ('cat', categorical_transformer, categorical_features)
+            ])
+            
+        # 2. Model Selection & Grids
+        models = {}
+        if task_type.lower() == 'classification':
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.svm import SVC
+            
+            # Encode target if classification
+            le = LabelEncoder()
+            y = le.fit_transform(y)
+            
+            models = {
+                'LogisticRegression': (LogisticRegression(max_iter=1000), {'classifier__C': [0.1, 1.0, 10.0]}),
+                'RandomForest': (RandomForestClassifier(), {'classifier__n_estimators': [50, 100], 'classifier__max_depth': [None, 10, 20]}),
+                'SVM': (SVC(), {'classifier__C': [0.1, 1, 10], 'classifier__kernel': ['linear', 'rbf']}),
+                'XGBoost': (xgb.XGBClassifier(eval_metric='logloss'), {'classifier__n_estimators': [50, 100], 'classifier__learning_rate': [0.01, 0.1]}),
+                'LightGBM': (lgb.LGBMClassifier(verbose=-1), {'classifier__n_estimators': [50, 100], 'classifier__learning_rate': [0.01, 0.1]})
+            }
+            metric = 'accuracy'
+        else:
+            from sklearn.linear_model import LinearRegression
+            from sklearn.svm import SVR
+            
+            models = {
+                'LinearRegression': (LinearRegression(), {}),
+                'RandomForest': (RandomForestRegressor(), {'classifier__n_estimators': [50, 100], 'classifier__max_depth': [None, 10, 20]}),
+                'SVM': (SVR(), {'classifier__C': [0.1, 1, 10], 'classifier__kernel': ['linear', 'rbf']}),
+                'XGBoost': (xgb.XGBRegressor(), {'classifier__n_estimators': [50, 100], 'classifier__learning_rate': [0.01, 0.1]}),
+                'LightGBM': (lgb.LGBMRegressor(verbose=-1), {'classifier__n_estimators': [50, 100], 'classifier__learning_rate': [0.01, 0.1]})
+            }
+            metric = 'r2'
+
+        # 3. Training & Evaluation
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        results = []
+        best_score = -np.inf
+        best_model_name = ""
+        
+        for name, (model, params) in models.items():
+            # Create Pipeline
+            # Note: 'classifier' prefix in params matches this step name
+            clf = Pipeline(steps=[('preprocessor', preprocessor),
+                                  ('classifier', model)])
+            
+            # RandomizedSearchCV
+            # For speed, n_iter is small
+            search = RandomizedSearchCV(clf, params, n_iter=5, cv=3, scoring=metric, n_jobs=-1, random_state=42)
+            search.fit(X_train, y_train)
+            
+            score = search.score(X_test, y_test)
+            results.append([name, f"{score:.4f}", str(search.best_params_)])
+            
+            if score > best_score:
+                best_score = score
+                best_model_name = name
+
+        # Format Output
+        headers = ["Model", f"Test Score ({metric})", "Best Params"]
+        table = tabulate(results, headers=headers, tablefmt="github")
+        
+        tested_models_str = ", ".join(models.keys())
+        
+        return f"### AutoML Results for Target: {target_col}\n\nTask: {task_type}\nWinner: **{best_model_name}** ({best_score:.4f})\n\n**Tested Models:** {tested_models_str}\n\n{table}"
+        
+    except Exception as e:
+        return f"AutoML failed: {e}"
+
 
 def main():
     st.set_page_config(page_title="Data Science Agent (NVIDIA Powered)", page_icon="🧪", layout="wide")
@@ -168,8 +286,8 @@ def main():
     with st.sidebar:
         st.header("1. Configuration")
         # Default user key
-        default_key = "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"
-        api_key = st.text_input("NVIDIA API Key", value=default_key, type="password")
+        default_key = "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"
+        api_key = st.text_input("API Key (NVIDIA or OpenRouter)", value=default_key, type="password")
         
         st.header("2. Data Upload")
         uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
@@ -205,6 +323,12 @@ def main():
             with col2:
                 st.subheader("2. Statistics")
                 st.text(tabulate(df.describe(), headers='keys', tablefmt='psql'))
+                
+            st.divider()
+            
+            # Need to import these inside main or at top level if mostly used here
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.svm import SVC
             
             st.divider()
             
@@ -228,9 +352,11 @@ def main():
 
             # Modeling
             with col4:
-                st.subheader("4. Quick Modeling")
+                st.subheader("4. Quick Modeling & AutoML")
                 target = st.selectbox("Target Variable", df.columns, key="manual_target")
-                if st.button("Train Random Forest", key="manual_train"):
+                model_choice = st.selectbox("Choose Model", ["Random Forest", "XGBoost", "LightGBM", "SVM", "Linear/Logistic Regression"], key="model_choice")
+                
+                if st.button("Train Model", key="manual_train"):
                     try:
                         # Simple Prep
                         model_df = df.dropna().copy()
@@ -240,28 +366,47 @@ def main():
                         X = model_df.drop(columns=[target])
                         y = model_df[target]
                         
-                        if len(y.unique()) < 20 or y.dtype == 'object':
-                            model = RandomForestClassifier()
-                            metric_name = "Accuracy"
-                            task = "Classification"
+                        task = "Regression" if len(y.unique()) > 20 and y.dtype != 'object' else "Classification"
+                        
+                        if model_choice == "Random Forest":
+                            model = RandomForestRegressor() if task == "Regression" else RandomForestClassifier()
+                        elif model_choice == "XGBoost":
+                            model = xgb.XGBRegressor() if task == "Regression" else xgb.XGBClassifier()
+                        elif model_choice == "LightGBM":
+                            model = lgb.LGBMRegressor(verbose=-1) if task == "Regression" else lgb.LGBMClassifier(verbose=-1)
+                        elif model_choice == "SVM":
+                            model = SVR() if task == "Regression" else SVC()
                         else:
-                            model = RandomForestRegressor()
-                            metric_name = "R2 Score"
-                            task = "Regression"
+                            model = LinearRegression() if task == "Regression" else LogisticRegression(max_iter=1000)
                             
                         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                         model.fit(X_train, y_train)
                         score = model.score(X_test, y_test)
                         
-                        st.success(f"**{task}** | **{metric_name}:** {score:.4f}")
+                        metric_name = "R2 Score" if task == "Regression" else "Accuracy"
+                        st.success(f"**{model_choice} ({task})** | **{metric_name}:** {score:.4f}")
                         
                         if task == "Regression":
                             fig, ax = plt.subplots()
                             sns.scatterplot(x=y_test, y=model.predict(X_test), ax=ax)
-                            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                            plot_max = max(y_test.max(), model.predict(X_test).max())
+                            plot_min = min(y_test.min(), model.predict(X_test).min())
+                            plt.plot([plot_min, plot_max], [plot_min, plot_max], 'r--')
                             st.pyplot(fig)
+                            
                     except Exception as e:
                         st.error(f"Modeling Error: {e}")
+
+                st.divider()
+                if st.button("🚀 Run AutoML (Compare All)", key="btn_automl"):
+                    with st.spinner("Running AutoML..."):
+                         # Detect task
+                         temp_df = df.dropna(subset=[target])
+                         u_len = len(temp_df[target].unique())
+                         detected_task = "regression" if u_len > 20 and temp_df[target].dtype != 'object' else "classification"
+                         
+                         result = run_automl.invoke({"target_col": target, "task_type": detected_task})
+                         st.markdown(result)
         else:
             st.info("Upload data in the sidebar to enable manual tools.")
 
@@ -285,7 +430,16 @@ def main():
                 context = f"Dataset Info:\n{info_text}\n\nStats:\n{desc_text}\n\nFirst Rows:\n{head_text}"
                 
                 # Call NVIDIA LLM
-                llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
+                # Init LLM based on Key Type
+                if api_key.startswith("sk-or-"):
+                    from langchain_openai import ChatOpenAI
+                    llm = ChatOpenAI(
+                        model="meta-llama/llama-3.1-70b-instruct", 
+                        api_key=api_key,
+                        base_url="https://openrouter.ai/api/v1"
+                    )
+                else:
+                    llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
                 prompt = f"You are a Data Scientist. Analyze the following dataset summary and provide a comprehensive executive summary of the data, highlighting key distributions, potential data quality issues, and interesting patterns. Use bullet points.\n\n{context}"
                 
                 response = llm.invoke(prompt)
@@ -325,9 +479,18 @@ def main():
                 with st.spinner("Thinking (NVIDIA NIM)..."):
                         try:
                             # Initialize NVIDIA Chat Model
-                            llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
+                            # Initialize Chat Model
+                            if api_key.startswith("sk-or-"):
+                                from langchain_openai import ChatOpenAI
+                                llm = ChatOpenAI(
+                                    model="meta-llama/llama-3.1-70b-instruct", 
+                                    api_key=api_key,
+                                    base_url="https://openrouter.ai/api/v1"
+                                )
+                            else:
+                                llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
                             
-                            tools = [get_dataset_info, get_summary_statistics, run_linear_regression, run_svm_regression, run_manova, generate_plot]
+                            tools = [get_dataset_info, get_summary_statistics, run_linear_regression, run_svm_regression, run_manova, generate_plot, run_automl]
                             
                             # Custom ReAct Prompt
                             template = '''Answer the following questions as best you can. You have access to the following tools:

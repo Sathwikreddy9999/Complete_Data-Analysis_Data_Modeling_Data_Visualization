@@ -93,21 +93,22 @@ def main():
         
         if not api_key:
             if api_provider == "NVIDIA":
-                 # Use env var or empty default
-                default_key = os.getenv("NVIDIA_API_KEY", "")
+                 # Default key provided by user for convenience (only for NVIDIA as per original code)
+                default_key = "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"
                 api_key = default_key 
             elif api_provider == "Anthropic":
-                default_key = os.getenv("ANTHROPIC_API_KEY", "")
+                default_key = ""
                 api_key = default_key
-                if default_key: st.sidebar.info("Using default Claude API Key from env")
+                # st.sidebar.info("Using default Claude API Key")
             elif api_provider == "Gemini":
-                default_key = os.getenv("GEMINI_API_KEY", "")
+                default_key = ""
                 api_key = default_key
-                if default_key: st.sidebar.info("Using default Gemini API Key from env")
+                # st.sidebar.info("Using default Gemini API Key")
 
         if not api_key and api_provider == "NVIDIA":
-             # Fallback
-             api_key = os.getenv("NVIDIA_API_KEY", "")
+             # Use the hardcoded key if specific to legacy/demo
+             api_key = "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"
+             st.sidebar.info("Using default Demo NVIDIA Key")
     
         if not api_key:
             st.sidebar.warning(f"Please enter your {api_provider} API Key to generate images.")

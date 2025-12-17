@@ -1,4 +1,15 @@
 streamlit
 pandas
-requests
+numpy
+seaborn
+matplotlib
+statsmodels
+scikit-learn
+xgboost
+lightgbm
+tabulate
+langchain
+langchain-nvidia-ai-endpoints
+langchain-community
+langchain-openai
 python-dotenv

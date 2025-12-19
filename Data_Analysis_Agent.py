@@ -127,9 +127,9 @@ def get_schema_context(dfs):
     return context
 
 def main():
-    st.set_page_config(page_title="Data Analysis Agent", page_icon="📈", layout="wide")
+    st.set_page_config(page_title="Data Analysis Agent", page_icon=None, layout="wide")
     apply_apple_style()
-    st.title("📈 Data Analysis Agent")
+    st.title("Data Analysis Agent")
 
     # --- Session State ---
     if "messages" not in st.session_state:
@@ -140,7 +140,7 @@ def main():
     # --- Sidebar ---
     with st.sidebar:
         st.header("Configuration")
-        default_key = "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"
+        default_key = "YOUR_API_KEY_HERE"
         # Secure API Key Loading
         api_key = os.getenv("OPENROUTER_API_KEY", default_key)
         st.session_state.api_key = api_key

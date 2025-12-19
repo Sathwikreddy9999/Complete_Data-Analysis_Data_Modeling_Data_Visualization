@@ -455,9 +455,9 @@ def run_automl(target_col: str, task_type: str = 'classification', feature_cols:
 
 
 def main():
-    st.set_page_config(page_title="Data Science Agent (NVIDIA Powered)", page_icon="🧪", layout="wide")
+    st.set_page_config(page_title="Data Science Agent (NVIDIA Powered)", page_icon=None, layout="wide")
     apply_apple_style()
-    st.title("🧪 Data Science Agent")
+    st.title("Data Science Agent")
     st.caption("Powered by NVIDIA NIM & LangChain")
 
     # Initialize Session State
@@ -469,7 +469,7 @@ def main():
         st.session_state.summary_generated = False
     
     # Store API key globally for tools
-    st.session_state.api_key = os.getenv("OPENROUTER_API_KEY", "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")
+    st.session_state.api_key = os.getenv("OPENROUTER_API_KEY", "YOUR_API_KEY_HERE")
 
     # --- Sidebar for Config & Upload ---
     with st.sidebar:
@@ -496,7 +496,7 @@ def main():
     # --- Unified Layout ---
     
     # 1. Manual Workflow (Collapsible)
-    with st.expander("🛠️ Manual Step-by-Step Analysis Tools", expanded=False):
+    with st.expander("Manual Step-by-Step Analysis Tools", expanded=False):
         if st.session_state.df is not None:
             df = st.session_state.df
             
@@ -585,7 +585,7 @@ def main():
                         st.error(f"Modeling Error: {e}")
 
                 st.divider()
-                if st.button("🚀 Run AutoML (Compare All)", key="btn_automl"):
+                if st.button("Run AutoML (Compare All)", key="btn_automl"):
                     with st.spinner("Running AutoML..."):
                          # Detect task
                          temp_df = df.dropna(subset=[target])
@@ -600,7 +600,7 @@ def main():
     st.divider()
 
     # 2. Conversational AI
-    st.subheader("💬 AI Data Assistant")
+    st.subheader("AI Data Assistant")
 
     # --- Auto-Summary Logic ---
     if st.session_state.df is not None and not st.session_state.summary_generated:
@@ -669,7 +669,7 @@ def main():
     # Quick Action Buttons
     if st.session_state.df is not None:
         st.divider()
-        with st.expander("🚀 AutoML Configuration & Execution", expanded=True):
+        with st.expander("AutoML Configuration & Execution", expanded=True):
              st.markdown("### Configurable AutoML Analysis")
              col_auto1, col_auto2 = st.columns(2)
              
@@ -685,7 +685,7 @@ def main():
                  available_predictors = [c for c in all_cols if c != target_col]
                  selected_predictors = st.multiselect("Select Predictor Variables (X)", available_predictors, default=available_predictors, key="automl_predictors")
 
-             if st.button("🚀 Run Auto-ML Analysis", use_container_width=True, type="primary"):
+             if st.button("Run Auto-ML Analysis", use_container_width=True, type="primary"):
                  if not selected_predictors:
                      st.error("Please select at least one predictor variable.")
                  else:

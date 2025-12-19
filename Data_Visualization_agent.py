@@ -134,9 +134,9 @@ Generate the full HTML dashboard code now. Return ONLY the raw HTML.
         return f"Error generating dashboard: {e}"
 
 def main():
-    st.set_page_config(page_title="Data Viz Generator", page_icon="🎨", layout="wide")
+    st.set_page_config(page_title="Data Viz Generator", page_icon=None, layout="wide")
     apply_apple_style()
-    st.title("🎨 Recursive Data Visualization Agent")
+    st.title("Recursive Data Visualization Agent")
     st.markdown("Upload data -> AI Analyzes -> AI Codes -> Live Dashboard.")
 
     # Sidebar Configuration
@@ -179,11 +179,11 @@ def main():
                     return
 
                 # 1. Prompt Generation Step
-                with st.spinner(f"🧠 1/2 Analyzing Data & Engineering {report_type} Style Prompt..."):
+                with st.spinner(f"Analyzing Data & Engineering {report_type} Style Prompt..."):
                     generated_prompt = generate_design_prompt(df_head, df_info, business_domain, report_type, api_key)
                 
                 # 2. Code Generation Step (Using the Prompt)
-                with st.spinner("💻 2/2 Writing HTML/JS Code based on Prompt..."):
+                with st.spinner("Writing HTML/JS Code based on Prompt..."):
                     html_code = generate_dashboard_html(df_head, df_info, business_domain, report_type, generated_prompt, api_key)
                 
                 # 3. Output Handling
@@ -208,7 +208,7 @@ def main():
 
                     # SECTION 2: PROMPT (BOTTOM)
                     st.divider()
-                    with st.expander("📝 View AI Design Prompt Used", expanded=False):
+                    with st.expander("View AI Design Prompt Used", expanded=False):
                         st.markdown(generated_prompt)
 
         except Exception as e:

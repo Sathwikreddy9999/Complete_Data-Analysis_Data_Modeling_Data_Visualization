@@ -24,9 +24,9 @@ def toggle_agent(agent_name):
         st.session_state.selected_agents.append(agent_name)
 
 def main():
-    st.set_page_config(page_title="IAI Data Manager", page_icon="👔", layout="wide")
+    st.set_page_config(page_title="IAI Data Manager", page_icon=None, layout="wide")
     apply_apple_style()
-    st.title("👔 AI Data Manager")
+    st.title("AI Data Manager")
     st.caption("Orchestrate your highly autonomous data team.")
 
     # Sidebar Config
@@ -38,7 +38,7 @@ def main():
         
         st.divider()
         if not st.session_state.mcp_active:
-             if st.button("🔌 Create MCP Server"):
+             if st.button("Create MCP Server"):
                 with st.spinner("Initializing MCP Server..."):
                     # Simulation of MCP Server Creation
                     st.session_state.mcp_active = True
@@ -46,13 +46,13 @@ def main():
                     # st.success("Agents connected via MCP protocol.")
                     st.rerun()
         else:
-             st.success("✅ MCP Server Active (Port 8000)")
+             st.success("MCP Server Active (Port 8000)")
 
         # Conditional SQL Connection - Shows ALWAYS if not connected
         if not st.session_state.sql_connected:
             # Show Connect Button if form not open
             if not st.session_state.show_sql_form:
-                if st.button("🔗 Connect SQL Server"):
+                if st.button("Connect SQL Server"):
                     st.session_state.show_sql_form = True
                     st.rerun()
             
@@ -88,7 +88,7 @@ def main():
                  st.rerun()
                      
         else:
-            st.success("✅ SQL Server Active")
+            st.success("SQL Server Active")
 
     # 1. Data Upload (Centralized)
     st.subheader("1. Central Data Hub")
@@ -165,9 +165,9 @@ def main():
             
             label = f"{agent_name.replace('Data_', '').replace('_agent', '')}"
             if order:
-                label = f"#{order} {label} ✅"
+                label = f"#{order} {label} (Selected)"
             else:
-                label = f"{label} ⚪"
+                label = f"{label}"
             
             # Button acts as toggle
             if st.button(label, key=f"btn_{agent_name}", use_container_width=True):
@@ -242,7 +242,7 @@ def main():
     st.divider()
 
     # Execution Block
-    if st.button("🚀 Execute Workflow", type="primary", use_container_width=True):
+    if st.button("Execute Workflow", type="primary", use_container_width=True):
         if not api_key:
             st.error("API Key required.")
             return
@@ -288,10 +288,10 @@ Return ONLY comma-separated names.
              
              # Rule 3 & 4: Terminal Agents
              if current == "Data_Visulization_agent":
-                 st.error(f"❌ Operation Not Allowed: Data Visualization Agent is terminal. It cannot pass data to {next_agent}.")
+                 st.error(f"Operation Not Allowed: Data Visualization Agent is terminal. It cannot pass data to {next_agent}.")
                  return
              if current == "Data_Science_agent":
-                 st.error(f"❌ Operation Not Allowed: Data Science Agent is terminal. It cannot pass data to {next_agent}.")
+                 st.error(f"Operation Not Allowed: Data Science Agent is terminal. It cannot pass data to {next_agent}.")
                  return
                  
              # Rule 2: Analysis -> Next
@@ -303,12 +303,12 @@ Return ONLY comma-separated names.
                  valid_modes = ["Ask Questions", "SQL Code", "Python Code", "R Code"]
                  
                  if not (gen_csv and mode in valid_modes):
-                     st.error(f"❌ Operation Not Allowed: Data Analysis Agent can only pass data to {next_agent} if 'Generate Downloadable CSV' is ENABLED.")
+                     st.error(f"Operation Not Allowed: Data Analysis Agent can only pass data to {next_agent} if 'Generate Downloadable CSV' is ENABLED.")
                      return
 
         # Execution Simulation & Real Output Generation
         st.divider()
-        st.subheader("📺 Output Window")
+        st.subheader("Output Window")
         
         progress_bar = st.progress(0)
         
@@ -346,7 +346,7 @@ Return ONLY comma-separated names.
                             clean_df, logs = apply_advanced_cleaning(st.session_state.df, clean_opts)
                             st.session_state.df = clean_df # UPDATE GLOBAL DATAFRAME for subsequent agents
                             
-                            st.markdown("### 🧹 Advanced Cleaning Report")
+                            st.markdown("### Advanced Cleaning Report")
                             for log in logs:
                                 st.caption(f"• {log}")
                             
@@ -359,7 +359,7 @@ Return ONLY comma-separated names.
                         else:
                             # Default profiling if no advanced options selected
                             profile = get_column_profile(st.session_state.df)
-                            st.markdown("### 🧹 Data Cleaning Report (Profile)")
+                            st.markdown("### Data Cleaning Report (Profile)")
                             st.json(profile) 
                     else:
                         st.warning("No data loaded to clean.")
@@ -379,7 +379,7 @@ Return ONLY comma-separated names.
                          
                          if mode == "Auto-Summary":
                              desc = df.describe()
-                             st.markdown("### 📊 Statistical Analysis")
+                             st.markdown("### Statistical Analysis")
                              st.text(desc.to_markdown()) 
                          
                          elif mode in ["Ask Questions", "Generate Graphs"]:
@@ -412,7 +412,7 @@ Return ONLY comma-separated names.
                                      agent_an = create_react_agent(llm_an, tools, prompt_template)
                                      agent_exec = AgentExecutor(agent=agent_an, tools=tools, verbose=True, handle_parsing_errors=True, max_iterations=10)
                                      response = agent_exec.invoke({"input": prompt_text})
-                                     st.markdown("### 💬 Analysis Results")
+                                     st.markdown("### Analysis Results")
                                      st.markdown(response['output'])
 
                                  elif mode == "Generate Graphs":
@@ -440,7 +440,7 @@ Return ONLY comma-separated names.
                                       st.markdown(f"**Agent Status:** {response['output']}")
                                       
                                       if "analysis_plots" in st.session_state and st.session_state.analysis_plots:
-                                          st.markdown("### 📊 Generated Graph")
+                                          st.markdown("### Generated Graph")
                                           for html in st.session_state.analysis_plots:
                                               components.html(html, height=500, scrolling=True)
                                           st.session_state.analysis_plots = [] # Clear
@@ -459,7 +459,7 @@ Return ONLY comma-separated names.
                             llm_an = ChatOpenAI(model="meta-llama/llama-3.1-70b-instruct", api_key=api_key, base_url="https://openrouter.ai/api/v1")
                             resp = llm_an.invoke([("system", system_prompt), ("user", prompt_text)])
                             
-                            st.markdown(f"### 💻 {lang} Code")
+                            st.markdown(f"### {lang} Code")
                             st.code(resp.content, language=lang.lower())
 
                      
@@ -507,7 +507,7 @@ Return ONLY comma-separated names.
                                          if os.path.exists("analysis_output.csv"):
                                              with open("analysis_output.csv", "rb") as f:
                                                  st.download_button(
-                                                     label="💾 Download Analysis Result (CSV)",
+                                                     label="Download Analysis Result (CSV)",
                                                      data=f,
                                                      file_name="manager_analysis_result.csv",
                                                      mime="text/csv"
@@ -521,7 +521,7 @@ Return ONLY comma-separated names.
                                                  st.session_state.df = new_df
                                                  # Also update 'main_data' in dfs to keep sync
                                                  st.session_state.dfs['main_data'] = new_df
-                                                 st.info("🔄 Output passed to next agent.")
+                                                 st.info("Output passed to next agent.")
                                          except Exception as e:
                                              st.warning(f"Could not pass data to next agent: {e}")
                                  except Exception as e:
@@ -551,7 +551,7 @@ Return ONLY comma-separated names.
                             # 2. Generate Code
                             html_code = generate_dashboard_html(df_head, df_info, domain, style, design_prompt, api_key)
                             
-                            st.markdown("### 🎨 Visualization Output")
+                            st.markdown("### Visualization Output")
                             if "Error" in html_code:
                                 st.error(html_code)
                             else:
@@ -601,7 +601,7 @@ Return ONLY comma-separated names.
                                 task_type=task_type, 
                                 feature_cols=features if features else None
                             )
-                            st.markdown("### 🧪 AutoML Results")
+                            st.markdown("### AutoML Results")
                             st.markdown(result) # Text/Table Output
                             
                             # --- POST-UPDATE: GENERATE PLOTS ---
@@ -614,7 +614,7 @@ Return ONLY comma-separated names.
                             generate_plot.func("histogram", x_col=target)
                             
                             if "plots" in st.session_state and st.session_state.plots:
-                                st.markdown("### 📊 Data Science Visuals")
+                                st.markdown("### Data Science Visuals")
                                 col_p1, col_p2 = st.columns(2)
                                 
                                 # We expect 2 plots typically, but let's handle dynamic

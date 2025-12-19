@@ -224,10 +224,10 @@ def apply_cleaning_plan(df, plan):
     return df_clean
 
 def main():
-    st.set_page_config(page_title="Data Cleaning Agent", page_icon="🧹", layout="wide")
+    st.set_page_config(page_title="Data Cleaning Agent", page_icon=None, layout="wide")
     apply_apple_style()
     
-    st.title("🧹 Data Cleaning Agent")
+    st.title("Data Cleaning Agent")
     st.markdown("Upload a dataset. Choose **Advanced Options** in the sidebar for specific remediations.")
 
     # --- Session State for Chat ---
@@ -238,7 +238,7 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         # Secure API Key Loading
-        default_key = "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"
+        default_key = "YOUR_API_KEY_HERE"
         api_key = os.getenv("OPENROUTER_API_KEY", default_key)
         
         uploaded_file = st.file_uploader("Upload Dataset (CSV)", type=["csv"])
@@ -266,7 +266,7 @@ def main():
             with st.expander("View Extracted Metadata (Input to Agent)", expanded=False):
                 st.json(profile_data)
 
-            st.subheader("📄 Data Preview (First 5 Rows)")
+            st.subheader("Data Preview (First 5 Rows)")
             st.dataframe(df.head())
 
             # --- Advanced Cleaning Execution ---
@@ -276,7 +276,7 @@ def main():
                 else:
                     with st.spinner("Applying Advanced Strategies..."):
                         adv_clean_df, adv_logs = apply_advanced_cleaning(df, cleaning_challenges)
-                        st.subheader("✅ Advanced Cleaning Results")
+                        st.subheader("Advanced Cleaning Results")
                         if adv_logs:
                              for log_item in adv_logs: st.caption(f"• {log_item}")
                         else:
@@ -287,7 +287,7 @@ def main():
                         st.success("You can continue to use the AI Agent below on the original data, or use this cleaned version.")
             # --- AI Agent Section ---
             st.divider()
-            st.subheader("🤖 AI Data Cleaning Agent")
+            st.subheader("AI Data Cleaning Agent")
             special_instructions = st.text_area(
                 "Special Instructions (Optional):", 
                 placeholder="e.g., 'For the Age column, if the distribution is skewed, use median. Otherwise use mean.'",
@@ -410,7 +410,7 @@ OUTPUT FORMAT (JSON ONLY, NO MARKDOWN):
 
     # --- Chat Interface ---
     st.divider()
-    st.subheader("💬 Q&A with Data Cleaning Expert")
+    st.subheader("Q&A with Data Cleaning Expert")
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):

@@ -13,3 +13,4 @@ langchain-nvidia-ai-endpoints
 langchain-community
 langchain-openai
 python-dotenv
+rapidfuzz

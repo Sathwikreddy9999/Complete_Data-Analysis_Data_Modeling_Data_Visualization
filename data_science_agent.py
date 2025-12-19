@@ -24,9 +24,81 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 import io
 import os
+from style_utils import apply_apple_style
 
 # --- TOOLS for Chat Agent ---
+import streamlit.components.v1 as components
+
 # --- TOOLS for Chat Agent ---
+@tool
+def generate_interactive_html(user_request: str, ignore: str = None) -> str:
+    """
+    Generates an interactive HTML visualization (Chart.js).
+    CRITICAL: ONLY use this tool if the user EXPLICITLY asks for a "plot", "graph", "chart", "heatmap", or "visualization".
+    DO NOT use this tool for general questions (e.g., "what is the mean?", "summarize data") that can be answered with text.
+    """
+    if "df" not in st.session_state or st.session_state.df is None: return "No data."
+    if "api_key" not in st.session_state: return "No API key found."
+    
+    df = st.session_state.df
+    api_key = st.session_state.api_key
+    
+    try:
+        # Prepare Data Context
+        df_head = df.head().to_csv(index=False)
+        buffer = io.StringIO()
+        df.info(buf=buffer)
+        df_info = buffer.getvalue()
+        
+        # Init LLM
+        if api_key.startswith("sk-or-"):
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(model="meta-llama/llama-3.1-70b-instruct", api_key=api_key, base_url="https://openrouter.ai/api/v1", temperature=0.2)
+        else:
+            # Fallback or NVIDIA specific
+            from langchain_nvidia_ai_endpoints import ChatNVIDIA
+            llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
+
+        system_prompt = """You are a Frontend Data Visualization Expert.
+        Goal: Generate a SINGLE, self-contained HTML snippet to visualize the data based on the user request.
+        
+        CRITICAL REQUIREMENTS:
+        1. Use **TailwindCSS** and **Chart.js** via CDN.
+        2. **BACKGROUND MUST BE WHITE (#ffffff)**.
+        3. Embed the data from the provided sample directly into the JS.
+        4. Return ONLY the raw HTML code.
+        """
+        
+        user_prompt = f"""
+        User Request: "{user_request}"
+        
+        Data Context:
+        {df_info}
+        
+        Data Sample (Top 5):
+        {df_head}
+        
+        Generate the HTML code now.
+        """
+        
+        from langchain_core.messages import HumanMessage, SystemMessage
+        response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
+        html_code = response.content.strip()
+        
+        # Cleanup code blocks
+        if html_code.startswith("```html"): html_code = html_code[7:]
+        elif html_code.startswith("```"): html_code = html_code[3:]
+        if html_code.endswith("```"): html_code = html_code[:-3]
+        
+        if "html_plots" not in st.session_state:
+            st.session_state.html_plots = []
+        st.session_state.html_plots.append(html_code)
+        
+        return "Interactive HTML visualization generated and displayed to user."
+        
+    except Exception as e:
+        return f"HTML Generation failed: {e}"
+
 @tool
 def get_dataset_info(ignore: str = None) -> str:
     """Returns basic information about the loaded dataset (columns, dtypes, head)."""
@@ -158,12 +230,13 @@ def generate_plot(plot_type: str, x_col: str = None, y_col: str = None, hue: str
         return f"Plotting failed: {e}"
 
 @tool
-def run_automl(target_col: str, task_type: str = 'classification', ignore: str = None) -> str:
+def run_automl(target_col: str, task_type: str = 'classification', feature_cols: list[str] = None, ignore: str = None) -> str:
     """
     Runs AutoML to find the best model for a given target column.
     Args:
         target_col (str): The name of the target column.
         task_type (str): 'classification' or 'regression'.
+        feature_cols (list[str]): Optional list of columns to use as predictors.
     Returns:
         str: A table summarizing the performance of different models and the best model's parameters.
     """
@@ -179,6 +252,15 @@ def run_automl(target_col: str, task_type: str = 'classification', ignore: str =
         df = df.dropna(subset=[target_col])
         X = df.drop(columns=[target_col])
         y = df[target_col]
+
+        # Filter Features if specified
+        if feature_cols:
+             # Ensure cols exist
+             valid_cols = [c for c in feature_cols if c in X.columns]
+             if valid_cols:
+                 X = X[valid_cols]
+             else:
+                 return "Error: None of the selected features were found in the dataset."
         
         # Identify columns
         numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
@@ -260,10 +342,113 @@ def run_automl(target_col: str, task_type: str = 'classification', ignore: str =
         # Format Output
         headers = ["Model", f"Test Score ({metric})", "Best Params"]
         table = tabulate(results, headers=headers, tablefmt="github")
-        
-        tested_models_str = ", ".join(models.keys())
-        
-        return f"### AutoML Results for Target: {target_col}\n\nTask: {task_type}\nWinner: **{best_model_name}** ({best_score:.4f})\n\n**Tested Models:** {tested_models_str}\n\n{table}"
+
+        # Extract Feature Importances / Coefficients
+        importance_table = ""
+        try:
+            best_model_obj = results[[r[0] for r in results].index(best_model_name)][0] # Name Only... wait, need object
+            
+            # Re-fit best model to get feature importance
+            best_params = eval(results[[r[0] for r in results].index(best_model_name)][2])
+            best_model_instance = models[best_model_name][0].set_params(**{k.split('__')[1]: v for k, v in best_params.items()})
+            
+            # Helper to get feature names from preprocessor
+            if hasattr(preprocessor, 'get_feature_names_out'):
+                feature_names = preprocessor.get_feature_names_out()
+            else:
+                 # Fallback for older sklearn or complex cases
+                feature_names = []
+                for name, trans, cols in preprocessor.transformers_:
+                    if hasattr(trans, 'get_feature_names_out'):
+                        feature_names.extend(trans.get_feature_names_out(cols))
+                    else:
+                        feature_names.extend(cols)
+            
+            # Re-train simple pipeline for importance extraction
+            final_pipe = Pipeline([('preprocessor', preprocessor), ('model', best_model_instance)])
+            final_pipe.fit(X, y)
+            
+            final_model = final_pipe.named_steps['model']
+            importances = []
+            
+            if hasattr(final_model, 'feature_importances_'):
+                importances = final_model.feature_importances_
+                metric_col = "Importance"
+            elif hasattr(final_model, 'coef_'):
+                importances = final_model.coef_[0] if final_model.coef_.ndim > 1 else final_model.coef_
+                metric_col = "Coefficient"
+            
+            if len(importances) > 0 and len(importances) == len(feature_names):
+                imp_data = sorted(zip(feature_names, importances), key=lambda x: abs(x[1]), reverse=True)
+                importance_table = tabulate(imp_data, headers=["Feature", metric_col], tablefmt="github")
+                importance_table = f"\n\n**Feature Significance ({best_model_name}):**\n\n{importance_table}"
+                
+                # --- MINIMAL MODEL LOGIC ---
+                # Select Top 3 Features (or less if fewer exist)
+                top_features = [x[0] for x in imp_data[:3]]
+                if len(top_features) > 0:
+                     # Check if top_features are actually in the original X (column transformer might have added/renamed cols)
+                     # This is tricky with OHE. If top feature is 'cat_val_1', we can't easily just pick that col from X.
+                     # SIMPLIFICATION: If we can map back to original columns, great. 
+                     # If not easily possible (due to OHE), we might skip or try best effort.
+                     # However, for many numeric features it works.
+                     
+                     # Simple approach: Find original columns that these features belong to.
+                     # Or, just retrain on the selected features IF they exist in X.
+                     valid_minimal_features = [f for f in top_features if f in X.columns]
+                     
+                     # If OHE was used, 'feature_names' come from transformer and look like 'x0_Value'. 
+                     # We can't use those to subset X directly.
+                     # Robust Fallback: If valid_minimal_features is empty or small, fallback to "Minimal model requires feature mapping" or skip.
+                     
+                     if valid_minimal_features:
+                         X_min = X[valid_minimal_features]
+                         X_train_min, X_test_min, y_train_min, y_test_min = train_test_split(X_min, y, test_size=0.2, random_state=42)
+                         
+                         # Retrain Best Model Type
+                         # Re-use best_params, but strip 'classifier__' prefix for kwargs if possible
+                         # best_params is like {'classifier__n_estimators': 100}
+                         stripped_params = {k.split('__')[1]: v for k, v in best_params.items()}
+                         
+                         model_class = models[best_model_name][0].__class__
+                         min_model = model_class(**stripped_params)
+                         
+                         # Pipeline for Minimal (Need Preprocessor too? Yes, but only for selected cols)
+                         # To be safe, re-create a simple preprocessor for these specific columns
+                         # Or just assume numeric for valid_minimal_features if they were passed through?
+                         # Let's create a mini-pipeline
+                         
+                         min_numeric_features = X_min.select_dtypes(include=['int64', 'float64']).columns
+                         min_categorical_features = X_min.select_dtypes(include=['object', 'category']).columns
+                         
+                         min_preprocessor = ColumnTransformer(
+                            transformers=[
+                                ('num', numeric_transformer, min_numeric_features),
+                                ('cat', categorical_transformer, min_categorical_features)
+                            ])
+                         
+                         min_pipe = Pipeline(steps=[('preprocessor', min_preprocessor), ('classifier', min_model)])
+                         min_pipe.fit(X_train_min, y_train_min)
+                         min_score = min_pipe.score(X_test_min, y_test_min)
+                         
+                         minimal_model_report = f"\n\n---\n\n### 📉 Minimal Model Analysis (Top {len(valid_minimal_features)} Drivers)\n"
+                         minimal_model_report += f"Train a simplified model using only the most important features:\n"
+                         minimal_model_report += f"- **Features Selected:** `{', '.join(valid_minimal_features)}`\n"
+                         minimal_model_report += f"- **Minimal Model Score:** `{min_score:.4f}`\n"
+                         minimal_model_report += f"- **Efficiency:** Retains **{min_score/best_score*100:.1f}%** of the Full Model's power."
+                     else:
+                         minimal_model_report = "\n\n*Minimal model training skipped (Features are derived/complex).*"
+                else:
+                    minimal_model_report = ""
+
+            else:
+                 minimal_model_report = ""
+                 
+        except Exception as e:
+            importance_table = f"\n\n*Could not extract feature importance: {str(e)}*"
+            minimal_model_report = ""
+
+        return f"### AutoML Results for Target: {target_col}\n\n#### 1. Full Model Analysis\n- **Predictors Used:** {len(X.columns)} features ({', '.join(X.columns)})\n- **Best Model:** {best_model_name}\n- **Performance:** **{best_score:.4f}** ({metric.replace('r2', 'R2 Score').replace('accuracy', 'Accuracy')})\n\n{table}{importance_table}{minimal_model_report}"
         
     except Exception as e:
         return f"AutoML failed: {e}"
@@ -271,6 +456,7 @@ def run_automl(target_col: str, task_type: str = 'classification', ignore: str =
 
 def main():
     st.set_page_config(page_title="Data Science Agent (NVIDIA Powered)", page_icon="🧪", layout="wide")
+    apply_apple_style()
     st.title("🧪 Data Science Agent")
     st.caption("Powered by NVIDIA NIM & LangChain")
 
@@ -282,12 +468,13 @@ def main():
     if "summary_generated" not in st.session_state:
         st.session_state.summary_generated = False
     
+    # Store API key globally for tools
+    st.session_state.api_key = os.getenv("OPENROUTER_API_KEY", "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")
+
     # --- Sidebar for Config & Upload ---
     with st.sidebar:
         st.header("1. Configuration")
-        # Default user key
-        default_key = "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"
-        api_key = st.text_input("API Key (NVIDIA or OpenRouter)", value=default_key, type="password")
+        # Secure API Key Loading
         
         st.header("2. Data Upload")
         uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
@@ -430,7 +617,9 @@ def main():
                 context = f"Dataset Info:\n{info_text}\n\nStats:\n{desc_text}\n\nFirst Rows:\n{head_text}"
                 
                 # Call NVIDIA LLM
+                # Call NVIDIA LLM
                 # Init LLM based on Key Type
+                api_key = st.session_state.api_key
                 if api_key.startswith("sk-or-"):
                     from langchain_openai import ChatOpenAI
                     llm = ChatOpenAI(
@@ -467,8 +656,55 @@ def main():
             for fig in st.session_state.plots:
                 st.pyplot(fig)
         st.session_state.plots = [] # Clear
+        
+    # Display Queued HTML Plots
+    if "html_plots" in st.session_state and st.session_state.html_plots:
+        with st.chat_message("assistant"):
+            for html_code in st.session_state.html_plots:
+                components.html(html_code, height=600, scrolling=True)
+                st.caption("Interactive Chart Generated via Chat")
+        st.session_state.html_plots = [] # Clear
 
     # Chat Input
+    # Quick Action Buttons
+    if st.session_state.df is not None:
+        st.divider()
+        with st.expander("🚀 AutoML Configuration & Execution", expanded=True):
+             st.markdown("### Configurable AutoML Analysis")
+             col_auto1, col_auto2 = st.columns(2)
+             
+             with col_auto1:
+                 # Target Selection
+                 all_cols = list(st.session_state.df.columns)
+                 # Default to last col
+                 default_idx = len(all_cols) - 1
+                 target_col = st.selectbox("Select Target Variable (Y)", all_cols, index=default_idx, key="automl_target")
+             
+             with col_auto2:
+                 # Predictor Selection
+                 available_predictors = [c for c in all_cols if c != target_col]
+                 selected_predictors = st.multiselect("Select Predictor Variables (X)", available_predictors, default=available_predictors, key="automl_predictors")
+
+             if st.button("🚀 Run Auto-ML Analysis", use_container_width=True, type="primary"):
+                 if not selected_predictors:
+                     st.error("Please select at least one predictor variable.")
+                 else:
+                     # Auto-trigger AutoML
+                     with st.spinner(f"Running AutoML on Target: {target_col} with {len(selected_predictors)} features..."):
+                         try:
+                            df = st.session_state.df
+                            # Detect task
+                            temp_df = df.dropna(subset=[target_col])
+                            u_len = len(temp_df[target_col].unique())
+                            detected_task = "regression" if u_len > 20 and temp_df[target_col].dtype != 'object' else "classification"
+                            
+                            # Invoke tool with features
+                            res = run_automl.invoke({"target_col": target_col, "task_type": detected_task, "feature_cols": selected_predictors})
+                            st.session_state.messages.append({"role": "assistant", "content": res})
+                            st.rerun()
+                         except Exception as e:
+                             st.error(f"Failed to run AutoML: {e}")
+
     if prompt := st.chat_input("Ask about your data..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -480,6 +716,9 @@ def main():
                         try:
                             # Initialize NVIDIA Chat Model
                             # Initialize Chat Model
+                            # Initialize NVIDIA Chat Model
+                            # Initialize Chat Model
+                            api_key = st.session_state.api_key
                             if api_key.startswith("sk-or-"):
                                 from langchain_openai import ChatOpenAI
                                 llm = ChatOpenAI(
@@ -490,7 +729,8 @@ def main():
                             else:
                                 llm = ChatNVIDIA(model="meta/llama-3.1-70b-instruct", nvidia_api_key=api_key)
                             
-                            tools = [get_dataset_info, get_summary_statistics, run_linear_regression, run_svm_regression, run_manova, generate_plot, run_automl]
+                            # Add the new html tool
+                            tools = [get_dataset_info, get_summary_statistics, run_linear_regression, run_svm_regression, run_manova, generate_plot, generate_interactive_html, run_automl]
                             
                             # Custom ReAct Prompt
                             template = '''Answer the following questions as best you can. You have access to the following tools:
@@ -520,7 +760,10 @@ Thought:{agent_scratchpad}'''
                             agent = create_react_agent(llm, tools, prompt_template)
                             agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
                             
-                            response = agent_executor.invoke({"input": prompt}) # Removed chat_history for ReAct simplicity or append to input
+                            # Append strict instruction to prefer HTML plots for visualizations
+                            user_input_augmented = prompt + " (IMPORTANT: Only use generate_interactive_html tool IF the user explicitly requests a visualization, plot, chart, or graph. If the user asks a text-based question, provide a text answer only.)"
+                            
+                            response = agent_executor.invoke({"input": user_input_augmented}) 
                             output_text = response['output']
                             
                             st.markdown(output_text)
@@ -531,6 +774,14 @@ Thought:{agent_scratchpad}'''
                                 for fig in st.session_state.plots:
                                     st.pyplot(fig)
                                 st.session_state.plots = []
+                            
+                            # Show HTML plots
+                            if "html_plots" in st.session_state and st.session_state.html_plots:
+                                for html_code in st.session_state.html_plots:
+                                    components.html(html_code, height=600, scrolling=True)
+                                    st.caption("Interactive Chart Generated via Chat")
+                                st.session_state.html_plots = []
+                                
                         except Exception as e:
                             st.error(f"Error: {e}")
         else:

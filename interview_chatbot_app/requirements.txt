@@ -1,0 +1,11 @@
+streamlit
+pandas
+requests
+langchain-openai
+streamlit-mic-recorder
+google-generativeai
+python-dotenv
+PyPDF2
+deepgram-sdk
+streamlit-webrtc
+streamlit-autorefresh

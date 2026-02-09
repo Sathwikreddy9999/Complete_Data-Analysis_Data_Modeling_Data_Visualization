@@ -29,4 +29,4 @@ HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
 # Default command to run the main app (can be overridden)
 ENTRYPOINT ["streamlit", "run"]
-CMD ["app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["Data_Visualization_agent.py", "--server.port=8501", "--server.address=0.0.0.0"]

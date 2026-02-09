@@ -238,7 +238,7 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         # Secure API Key Loading
-        default_key = "YOUR_API_KEY_HERE"
+        default_key = "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"
         api_key = os.getenv("OPENROUTER_API_KEY", default_key)
         
         uploaded_file = st.file_uploader("Upload Dataset (CSV)", type=["csv"])
@@ -262,6 +262,32 @@ def main():
             # Profiling
             with st.spinner("Profiling Data Metadata..."):
                 profile_data = get_column_profile(df)
+            
+            # --- Auto-Summary Logic ---
+            if api_key and api_key != "YOUR_API_KEY_HERE":
+                try:
+                    # Use a lightweight/fast model for summary if possible, or standard
+                    llm_summary = ChatOpenAI(
+                        model="meta-llama/llama-3.1-70b-instruct", 
+                        api_key=api_key,
+                        base_url="https://openrouter.ai/api/v1",
+                        temperature=0.1
+                    )
+                    summary_prompt = (
+                        "You are a Data Quality Expert.\n"
+                        f"Metadata: {json.dumps(profile_data)}\n"
+                        "Provide a SHORT (2-3 sentences) data health summary and list the top 3 most critical cleaning steps needed. "
+                        "Do not include greeting. Be direct."
+                    )
+                    with st.spinner("Generating Data Health Summary..."):
+                        summary_response = llm_summary.invoke([{"role":"user", "content": summary_prompt}])
+                        
+                    st.info(f"**Data Health Summary:**\n\n{summary_response.content}")
+                except Exception as e:
+                    st.warning(f"Could not generate summary: {e}")
+            elif api_key == "YOUR_API_KEY_HERE":
+                st.warning("⚠️ Please configure your API Key in the environment or script to see the AI Data Summary.")
+            # ---------------------------
                 
             with st.expander("View Extracted Metadata (Input to Agent)", expanded=False):
                 st.json(profile_data)
@@ -285,130 +311,15 @@ def main():
                         st.dataframe(adv_clean_df.head())
                         st.download_button("Download Cleaned Data", adv_clean_df.to_csv(index=False), f"advanced_cleaned_{uploaded_file.name}")
                         st.success("You can continue to use the AI Agent below on the original data, or use this cleaned version.")
-            # --- AI Agent Section ---
-            st.divider()
-            st.subheader("AI Data Cleaning Agent")
-            special_instructions = st.text_area(
-                "Special Instructions (Optional):", 
-                placeholder="e.g., 'For the Age column, if the distribution is skewed, use median. Otherwise use mean.'",
-                help="Instructions here will override default logic."
-            )
-            
-            if st.button("AI Agent: Plan & Clean Data"):
-                if not api_key:
-                    st.error("Please provide an OpenRouter API Key.")
-                    return
-
-                with st.spinner("Analyzing & Cleaning..."):
-                    try:
-                        llm = ChatOpenAI(
-                            model="meta-llama/llama-3.1-70b-instruct", 
-                            api_key=api_key,
-                            base_url="https://openrouter.ai/api/v1",
-                            temperature=0.1 # Low temp for deterministic output
-                        )
-
-                        system_prompt = """You are a Data Cleaning Decision Agent.
-
-Your role is to ANALYZE dataset profiling metadata and DECIDE the appropriate data cleaning actions.
-
-INPUT YOU RECEIVE:
-1. Dataset metadata (column names, data types, null %, min/max, samples)
-2. User Special Instructions (Optional)
-
-YOUR RESPONSIBILITIES:
-- Detect data quality issues.
-- Recommend cleaning actions based on standard practices or USER INSTRUCTIONS.
-- If User provides instructions like "use IQR for outliers", you MUST follow them.
-- OUTPUT JSON with 'parameters' that describe EXACTLY how to fix it.
-
-ALLOWED CLEANING ACTIONS & PARAMETERS:
-1. missing_value_handling
-   - parameters: {"strategy": "drop_rows" | "impute_mean" | "impute_median" | "impute_mode" | "fill_value", "value": "..."}
-2. type_cast
-   - parameters: {"target_type": "numeric" | "datetime" | "string", "regex_cleanup": boolean, "flag_errors": boolean}
-3. duplicate_handling
-   - parameters: {"subset": ["col_name"], "fuzzy": boolean, "threshold": 0-100}
-4. outlier_handling
-   - parameters: {"method": "iqr_winsorize", "limits": [0.01, 0.99]}
-5. encoding
-   - parameters: {"type": "one_hot", "drop_first": true}
-6. no_action
-
-OUTPUT FORMAT (JSON ONLY, NO MARKDOWN):
-{
-  "dataset": "<dataset_name>",
-  "columns": [
-    {
-      "column_name": "<string>",
-      "detected_issues": ["<string>"],
-      "recommended_actions": [
-        {
-          "action_type": "<allowed_action>",
-          "parameters": { ... },
-          "confidence": <float 0–1>
-        }
-      ]
-    }
-  ]
-}
-"""
-                        
-                        user_message = f"Dataset Name: {uploaded_file.name}\nMetadata:\n{json.dumps(profile_data, indent=2)}\n\n"
-                        if special_instructions:
-                            user_message += f"USER SPECIAL INSTRUCTIONS:\n{special_instructions}"
-                        
-                        messages = [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_message}
-                        ]
-                        
-                        response = llm.invoke(messages)
-                        content = response.content.strip()
-                        
-                        # Cleanup
-                        if content.startswith("```json"): content = content[7:]
-                        if content.endswith("```"): content = content[:-3]
-                            
-                        cleaning_plan = json.loads(content)
-                        
-                        st.subheader("1. Proposed Cleaning Plan")
-                        st.json(cleaning_plan)
-                        
-                        # Apply Cleaning
-                        df_cleaned = apply_cleaning_plan(df, cleaning_plan)
-                        
-                        st.subheader("2. Cleaned Data Preview")
-                        st.dataframe(df_cleaned.head())
-                        st.caption(f"Original Shape: {df.shape} -> Cleaned Shape: {df_cleaned.shape}")
-                        
-                        # Download Buttons
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.download_button(
-                                label="Download Cleaned Data (CSV)",
-                                data=df_cleaned.to_csv(index=False),
-                                file_name=f"cleaned_{uploaded_file.name}",
-                                mime="text/csv"
-                            )
-                        with col2:
-                            st.download_button(
-                                label="Download Cleaning Plan (JSON)",
-                                data=json.dumps(cleaning_plan, indent=2),
-                                file_name=f"cleaning_plan_{uploaded_file.name}.json",
-                                mime="application/json"
-                            )
-                        
-                    except json.JSONDecodeError:
-                        st.error("Failed to parse JSON response. Raw output:")
-                        st.text(content)
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
+        
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
-    # --- Chat Interface ---
+    # --- AI Agent Section REMOVED (Merged into Chat Below) ---
+            st.divider()
+
+
+     # --- Chat Interface ---
     st.divider()
     st.subheader("Q&A with Data Cleaning Expert")
 
@@ -428,6 +339,16 @@ OUTPUT FORMAT (JSON ONLY, NO MARKDOWN):
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # 1. Pipeline: Apply Advanced Cleaning first (if selected)
+                    processed_df = df.copy()
+                    applied_constraints = []
+                    if cleaning_challenges:
+                        processed_df, _ = apply_advanced_cleaning(processed_df, cleaning_challenges)
+                        applied_constraints = cleaning_challenges
+                    
+                    # 2. Re-Profile the PROCESSED data so the LLM sees the current state
+                    current_profile = get_column_profile(processed_df)
+
                     chat_llm = ChatOpenAI(
                         model="meta-llama/llama-3.1-70b-instruct", 
                         api_key=api_key,
@@ -435,15 +356,24 @@ OUTPUT FORMAT (JSON ONLY, NO MARKDOWN):
                     )
                     
                     # Context construction
-                    context_str = ""
-                    if uploaded_file and 'profile_data' in locals():
-                        context_str = f"Dataset Metadata: {json.dumps(profile_data, indent=2)}"
+                    context_str = f"Dataset Metadata (After Pre-Cleaning): {json.dumps(current_profile, indent=2)}"
                     
-                    system_msg = (
-                        "You are a helpful Data Quality Expert. Answer user questions about the dataset based on the provided metadata profile.\n"
-                        "Explain data issues clearly and suggest why certain cleaning steps (like imputation or dropping) might be needed.\n"
-                        f"{context_str}"
-                    )
+                    # Capture Sidebar Constraints for Context
+                    constraints_str = ""
+                    if applied_constraints:
+                        constraints_str = f"\n\nNOTE: The user has already applied the following pre-processing filters via sidebar: {applied_constraints}. The metadata above reflects this clean state. You should focus on ANY ADDITIONAL cleaning requested by the user."
+
+                    # Updated prompt
+                    system_msg = f"""You are a helpful Data Quality Expert. You can answer questions OR generate a cleaning plan.
+1. If the user asks a question, answer it normally in text.
+2. If the user asks to CLEAN the data or Apply Remediation:
+   - OUTPUT A JSON BLOCK with the cleaning plan in the 'columns' format.
+   - START the response with 'Here is the cleaning plan:' and then the JSON block.
+   - The JSON should follow this schema:
+     {{"columns": [{{"column_name": "...", "recommended_actions": [{{"action_type": "...", "parameters": {{...}}}}]}}]}}
+   - Allowed Actions: missing_value_handling, type_cast, duplicate_handling, outlier_handling, encoding, no_action.
+{context_str}
+{constraints_str}"""
                     
                     messages = [
                         {"role": "system", "content": system_msg},
@@ -451,8 +381,51 @@ OUTPUT FORMAT (JSON ONLY, NO MARKDOWN):
                     ]
                     
                     response = chat_llm.invoke(messages)
-                    st.markdown(response.content)
-                    st.session_state.messages.append({"role": "assistant", "content": response.content})
+                    content = response.content
+                    
+                    # Check for JSON Code Block
+                    json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
+                    
+                    if json_match:
+                        # Extract and Process JSON Logic
+                        json_str = json_match.group(1)
+                        try:
+                            plan = json.loads(json_str)
+                            
+                            # Show Text Response Part (before/after json)
+                            text_part = content.replace(json_match.group(0), "").strip()
+                            st.markdown(text_part)
+                            
+                            # Show "Proposed Cleaning Plan" JSON
+                            st.subheader("Proposed Cleaning Plan")
+                            st.json(plan)
+                            
+                            st.session_state.messages.append({"role": "assistant", "content": content})
+                            
+                            st.caption("✅ Agent generated a cleaning plan. applying now...")
+                            
+                            # Apply Logic to the PROCESSED DF
+                            final_df = apply_cleaning_plan(processed_df, plan)
+                            st.dataframe(final_df.head())
+                            
+                            # Download Button IN CHAT
+                            import uuid
+                            unique_key = str(uuid.uuid4())
+                            st.download_button(
+                                "Download Cleaned CSV",
+                                final_df.to_csv(index=False),
+                                f"cleaned_data_{unique_key}.csv",
+                                key=unique_key
+                            )
+                            
+                        except json.JSONDecodeError:
+                            st.warning("Agent tried to clean but generated invalid JSON.")
+                            st.code(json_str)
+                    else:
+                        # Normal Chat Response
+                        st.markdown(content)
+                        st.session_state.messages.append({"role": "assistant", "content": content})
+
                     
                 except Exception as e:
                     st.error(f"Chat Error: {e}")

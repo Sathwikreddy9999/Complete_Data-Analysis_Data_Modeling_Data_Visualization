@@ -536,7 +536,6 @@ def main():
     apply_apple_style()
 
     st.title("Document Parser Agent")
-    st.caption(f"Parser: `{PARSE_MODEL}`  •  Chat: `{CHAT_MODEL}`")
 
     # Session init
     for key, default in [

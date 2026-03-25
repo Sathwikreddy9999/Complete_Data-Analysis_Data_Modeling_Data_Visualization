@@ -27,7 +27,7 @@ load_dotenv()
 # --- CONFIGURATION ---
 OPENROUTER_API_KEY = os.getenv("GRAPH_API_KEY") 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 MODEL_NAME = "google/gemini-3-flash-preview"
 BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -46,20 +46,16 @@ def extract_text_from_pdf(file):
     except Exception as e:
         return f"Could not extract PDF text: {e}"
 
-from transcription_handler import transcribe_audio_deepgram, AudioProcessor
+from transcription_handler import AudioProcessor
 
 def transcribe_audio_gemini(audio_bytes, live_mode=False):
     """
-    Uses Deepgram for transcription + Gemini for question detection.
-    This hybrid approach ensures high speed and smart context.
+    (Deprecated for file-based): Currently Interview Assistant exclusively uses continuous WebRTC.
     """
     if not GEMINI_API_KEY or GEMINI_API_KEY.startswith("sk-or"):
         return "Error: A valid Google Gemini API Key is required for audio analysis (Question Detection). OpenRouter keys do not work here."
     
-    # 1. Use Deepgram for the text part (Nova-2 is much faster than Gemini for STT)
-    transcript = transcribe_audio_deepgram(audio_bytes, DEEPGRAM_API_KEY)
-    if "Error" in transcript:
-        return transcript
+    return "Error: File-based transcription logic was migrated entirely to continuous WebRTC streaming via NVIDIA Riva."
 
     # 2. Use Gemini for Question Detection based on the transcript
     try:
@@ -488,7 +484,7 @@ def main():
                 ctx = webrtc_streamer(
                     key="continuous-listening",
                     mode=WebRtcMode.SENDONLY,
-                    audio_processor_factory=lambda: AudioProcessor(DEEPGRAM_API_KEY),
+                    audio_processor_factory=lambda: AudioProcessor(NVIDIA_API_KEY),
                     media_stream_constraints={"video": False, "audio": True},
                     rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
                     async_processing=True,
@@ -625,12 +621,13 @@ def main():
 
     # --- BOTTOM INPUT SECTION ---
     # Continuous listening controls are now at the top for better visibility
+    # Handling Automated Answer Generation (Separated to avoid blocking listen loop)
     st.sidebar.divider()
     st.sidebar.subheader("Transcription Status")
-    if DEEPGRAM_API_KEY:
-        st.sidebar.success("Deepgram: Connected")
+    if NVIDIA_API_KEY:
+        st.sidebar.success("NVIDIA Riva: Connected")
     else:
-        st.sidebar.error("Deepgram: API Key Missing")
+        st.sidebar.error("NVIDIA Riva: API Key Missing")
 
     # Handling Automated Answer Generation (Separated to avoid blocking listen loop)
     if st.session_state.get("is_generating_answer", False) and st.session_state.get("current_question"):

@@ -20,24 +20,26 @@ def apply_apple_style():
     st.markdown("""
         <style>
         /* FONT STACK */
-        html, body, [class*="css"] {
+        html, body, [class*="css"], [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 16px;
-            color: #1d1d1f; /* Apple standard text */
+            color: #1d1d1f !important; /* Apple standard text */
             -webkit-font-smoothing: antialiased;
         }
 
         /* LIGHT THEME BASE */
         .stApp {
-            background-color: #ffffff; /* Pure white or very subtle off-white */
+            background-color: #ffffff !important; /* Pure white or very subtle off-white */
         }
 
         /* HEADERS - Clean, lighter weight */
+        h1, h2, h3, h4, h5, h6, label {
+            color: #1d1d1f !important;
+        }
         h1 {
             font-weight: 600;
             letter-spacing: -0.02em;
             font-size: 2.2rem;
-            color: #1d1d1f;
             padding-bottom: 0.5rem;
         }
         h2 {
@@ -53,9 +55,9 @@ def apply_apple_style():
 
         /* BUTTONS - Apple Human Interface Guidelines */
         .stButton > button {
-            background-color: #0071e3; /* Apple Blue */
-            color: white;
-            border: none;
+            background-color: #0071e3 !important; /* Apple Blue */
+            color: white !important;
+            border: none !important;
             border-radius: 980px; /* Pill shape or highly rounded */
             padding: 0.6rem 1.2rem;
             font-size: 0.95rem;
@@ -77,31 +79,32 @@ def apply_apple_style():
         /* Streamlit doesn't distinguish easily without keys, but general override */
 
         /* INPUTS & CARDS */
-        div[data-testid="stExpander"], div.stDataFrame, div[data-testid="stJson"] {
-            background: #fbfbfd; /* Very subtle grey/white mix */
+        div[data-testid="stExpander"], div.stDataFrame, div[data-testid="stJson"], .stDataFrame > div {
+            background: #fbfbfd !important; /* Very subtle grey/white mix */
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.04) !important;
             box-shadow: none;
+            color: #1d1d1f !important;
         }
         
         .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stSelectbox > div > div > div {
-            background-color: #f5f5f7; /* Apple Input Grey */
+            background-color: #f5f5f7 !important; /* Apple Input Grey */
             border-radius: 10px;
-            border: 1px solid transparent;
+            border: 1px solid transparent !important;
             padding: 0.5rem;
-            color: #1d1d1f;
+            color: #1d1d1f !important;
         }
         .stTextInput > div > div > input:focus, .stTextArea > div > div > textarea:focus {
-            background-color: #ffffff;
-            border-color: #0071e3;
-            box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+            background-color: #ffffff !important;
+            border-color: #0071e3 !important;
+            box-shadow: 0 0 0 3px rgba(0,113,227,0.15) !important;
         }
 
         /* SIDEBAR - Translucent/Frosted look simulation */
         section[data-testid="stSidebar"] {
-            background-color: #f5f5f7;
-            border-right: 1px solid rgba(0,0,0,0.05);
+            background-color: #f5f5f7 !important;
+            border-right: 1px solid rgba(0,0,0,0.05) !important;
         }
         
         /* HIDE STREAMLIT BRANDING TEXT (Cleanliness) */
@@ -112,7 +115,9 @@ def apply_apple_style():
         /* ALERTS - Soften them */
         div[data-baseweb="notification"] {
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+            background-color: #ffffff !important;
+            color: #1d1d1f !important;
         }
         
         </style>

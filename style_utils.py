@@ -23,18 +23,18 @@ def apply_apple_style():
         html, body, [class*="css"], [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 16px;
-            color: #1d1d1f !important; /* Apple standard text */
+            color: #f5f5f7 !important; /* Apple standard light text on dark */
             -webkit-font-smoothing: antialiased;
         }
 
-        /* LIGHT THEME BASE */
+        /* DARK THEME BASE */
         .stApp {
-            background-color: #ffffff !important; /* Pure white or very subtle off-white */
+            background-color: #010101 !important; /* Deep Apple Dark */
         }
 
         /* HEADERS - Clean, lighter weight */
         h1, h2, h3, h4, h5, h6, label {
-            color: #1d1d1f !important;
+            color: #ffffff !important;
         }
         h1 {
             font-weight: 600;
@@ -80,31 +80,31 @@ def apply_apple_style():
 
         /* INPUTS & CARDS */
         div[data-testid="stExpander"], div.stDataFrame, div[data-testid="stJson"], .stDataFrame > div {
-            background: #fbfbfd !important; /* Very subtle grey/white mix */
+            background: #1c1c1e !important; /* Apple dark grey card */
             border-radius: 12px;
             padding: 1rem;
-            border: 1px solid rgba(0,0,0,0.04) !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
             box-shadow: none;
-            color: #1d1d1f !important;
+            color: #f5f5f7 !important;
         }
         
         .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stSelectbox > div > div > div {
-            background-color: #f5f5f7 !important; /* Apple Input Grey */
+            background-color: #2c2c2e !important; /* Apple Input Dark Grey */
             border-radius: 10px;
             border: 1px solid transparent !important;
             padding: 0.5rem;
-            color: #1d1d1f !important;
+            color: #ffffff !important;
         }
         .stTextInput > div > div > input:focus, .stTextArea > div > div > textarea:focus {
-            background-color: #ffffff !important;
+            background-color: #3a3a3c !important;
             border-color: #0071e3 !important;
-            box-shadow: 0 0 0 3px rgba(0,113,227,0.15) !important;
+            box-shadow: 0 0 0 3px rgba(0,113,227,0.3) !important;
         }
 
         /* SIDEBAR - Translucent/Frosted look simulation */
         section[data-testid="stSidebar"] {
-            background-color: #f5f5f7 !important;
-            border-right: 1px solid rgba(0,0,0,0.05) !important;
+            background-color: #000000 !important;
+            border-right: 1px solid rgba(255,255,255,0.08) !important;
         }
         
         /* HIDE STREAMLIT BRANDING TEXT (Cleanliness) */
@@ -115,9 +115,9 @@ def apply_apple_style():
         /* ALERTS - Soften them */
         div[data-baseweb="notification"] {
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
-            background-color: #ffffff !important;
-            color: #1d1d1f !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+            background-color: #1c1c1e !important;
+            color: #f5f5f7 !important;
         }
         
         </style>

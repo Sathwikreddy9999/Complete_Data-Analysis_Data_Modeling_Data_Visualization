@@ -15,3 +15,6 @@ langchain-openai
 python-dotenv
 rapidfuzz
 openpyxl
+pypdf
+python-docx
+PyMuPDF
